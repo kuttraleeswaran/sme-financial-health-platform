@@ -1,167 +1,174 @@
 import streamlit as st
-import pandas as pd
 import requests
+import pandas as pd
 import plotly.express as px
+import os
 
 API_URL = "http://127.0.0.1:8000/analyze"
 
 st.set_page_config(
-    page_title="SME Financial Health AI",
+    page_title="SME Financial Health AI Platform",
     layout="wide"
 )
 
-st.markdown("""
-<style>
-.big-font {font-size:24px;font-weight:bold;}
-.card {
-    padding:20px;
-    border-radius:15px;
-    background-color:#0f172a;
-}
-</style>
-""", unsafe_allow_html=True)
+st.title("📊 SME Financial Health Assessment Platform")
 
-st.title("📊 SME Financial Health AI Dashboard")
+st.markdown("AI-powered financial analysis for SMEs")
 
-uploaded_file = st.file_uploader(
-    "📁 Upload Financial Excel File",
-    type=["xlsx"]
+# ---------------- LANGUAGE ----------------
+
+language = st.selectbox(
+    "🌍 Select Language",
+    {
+        "English": "en",
+        "Hindi": "hi",
+        "Tamil": "ta"
+    }.keys()
 )
 
-if uploaded_file:
+lang_code = {
+    "English": "en",
+    "Hindi": "hi",
+    "Tamil": "ta"
+}[language]
 
-    with st.spinner("🔍 AI analyzing your financial data..."):
+# ---------------- FILE UPLOAD ----------------
+
+file = st.file_uploader("📁 Upload Financial Excel File", type=["xlsx"])
+
+if file:
+
+    with st.spinner("Analyzing financial data..."):
         response = requests.post(
-            API_URL,
-            files={"file": uploaded_file}
+            API_URL + f"?language={lang_code}",
+            files={"file": file}
         )
 
     if response.status_code != 200:
-        st.error("❌ Backend not responding. Start FastAPI first.")
+        st.error("FastAPI backend is not running!")
         st.stop()
 
     data = response.json()
 
-    if "error" in data:
-        st.error(data["error"])
-        st.stop()
+    # ================= SUMMARY KPIs =================
 
-    # ===================== KPIs ======================
+    s = data["summary"]
 
-    st.subheader("📌 Key Performance Indicators")
+    st.subheader("📌 Key Financial Metrics")
 
-    k1,k2,k3,k4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
 
-    k1.metric("💰 Revenue", f"₹ {data['totals']['revenue']:,.0f}")
-    k2.metric("💸 Expenses", f"₹ {data['totals']['expenses']:,.0f}")
-    k3.metric("📈 Cashflow", f"₹ {data['totals']['cashflow']:,.0f}")
-    k4.metric("🏦 Credit Score", data["kpis"]["credit_score"])
+    c1.metric("Total Revenue", f"₹{s['total_revenue']:,.0f}")
+    c2.metric("Total Expenses", f"₹{s['total_expenses']:,.0f}")
+    c3.metric("Total Cashflow", f"₹{s['total_cashflow']:,.0f}")
+    c4.metric("Profit Margin", f"{s['profit_margin']}%")
 
-    # ===================== MONTHLY GRAPH ======================
+    st.divider()
 
-    st.subheader("📅 Monthly Financial Trend")
+    # ================= BENCHMARK =================
 
-    monthly_df = pd.DataFrame(data["monthly"])
+    st.subheader("🏭 Industry Benchmark")
 
-    monthly_df["Month"] = pd.Categorical(
-        monthly_df["Month"],
-        categories=["Jan","Feb","Mar","Apr","May","Jun",
-                    "Jul","Aug","Sep","Oct","Nov","Dec"],
-        ordered=True
-    )
+    b = data["benchmark"]
 
-    monthly_df = monthly_df.sort_values(["Year","Month"])
+    if "Above" in b["status"]:
+        st.success(
+            f"Above Industry Average 🚀 "
+            f"(Your Margin: {b['your_margin']}% | Industry Avg: {b['industry_avg_margin']}%)"
+        )
+    else:
+        st.warning(
+            f"Below Industry Average ⚠️ "
+            f"(Your Margin: {b['your_margin']}% | Industry Avg: {b['industry_avg_margin']}%)"
+        )
 
-    selected_year = st.selectbox(
-        "Select Year",
-        sorted(monthly_df["Year"].unique())
-    )
+    # ================= MONTHLY TREND =================
 
-    year_data = monthly_df[monthly_df["Year"] == selected_year]
+    st.subheader("📅 Monthly Financial Trends")
+
+    years = list(data["monthly_by_year"].keys())
+
+    selected_year = st.selectbox("Select Year", years)
+
+    df_month = pd.DataFrame(data["monthly_by_year"][selected_year])
 
     fig_month = px.line(
-        year_data,
+        df_month,
         x="Month",
-        y=["Revenue","Expenses","Cashflow"],
+        y=["Revenue", "Expenses", "Cashflow"],
         markers=True,
         title=f"Monthly Performance - {selected_year}"
     )
 
     st.plotly_chart(fig_month, use_container_width=True)
 
-    # ===================== YEARLY GRAPH ======================
+    # ================= YEARLY TREND =================
 
-    st.subheader("📊 Yearly Overview")
+    st.subheader("📊 Yearly Financial Summary")
 
-    yearly_df = pd.DataFrame(data["yearly"])
+    df_year = pd.DataFrame(data["yearly_summary"])
 
     fig_year = px.bar(
-        yearly_df,
+        df_year,
         x="Year",
-        y=["Revenue","Expenses","Cashflow"],
+        y=["Revenue", "Expenses", "Cashflow"],
         barmode="group",
-        title="Yearly Financial Comparison"
+        title="Yearly Growth Overview"
     )
 
     st.plotly_chart(fig_year, use_container_width=True)
 
-    # ===================== AI INSIGHTS ======================
+    # ================= ML FORECAST =================
 
-    st.subheader("🤖 AI Financial Insights")
+    st.subheader("🔮 AI Forecast (ML Based)")
 
-    profit_margin = data["kpis"]["profit_margin"]
-    growth = data["kpis"]["growth_percent"]
-    risk = data["kpis"]["risk_level"]
+    forecast = data["ml_forecast"]
 
-    if profit_margin > 20:
-        st.success("✔ Strong profitability. Business operations are healthy.")
-    elif profit_margin > 10:
-        st.warning("⚠ Moderate profit margin. Cost optimization can improve returns.")
+    st.info(
+        f"Predicted Revenue for {forecast['next_year']} : "
+        f"₹{forecast['predicted_revenue']:,.0f}"
+    )
+
+    # ================= GST COMPLIANCE =================
+
+    st.subheader("🧾 GST Compliance Check")
+
+    gst = data["gst_compliance"]
+
+    if gst["status"] == "Compliant":
+        st.success(
+            f"GST Compliant ✅ (Expected: ₹{gst['expected_gst']:,.0f} | "
+            f"Estimated Paid: ₹{gst['estimated_paid']:,.0f})"
+        )
     else:
-        st.error("❗ Low profit margin detected. Immediate financial review needed.")
+        st.error(
+            f"GST Non-Compliant ❌ (Expected: ₹{gst['expected_gst']:,.0f} | "
+            f"Estimated Paid: ₹{gst['estimated_paid']:,.0f})"
+        )
 
-    if growth > 0:
-        st.success(f"📈 Revenue is growing by {growth:.2f}% annually.")
-    else:
-        st.warning("📉 Revenue growth is weak or negative.")
+    # ================= AI INSIGHTS =================
 
-    st.info(f"⚖ Risk Level: {risk}")
+    st.subheader("🧠 AI Insights")
 
-    # ===================== AI RECOMMENDATIONS ======================
+    for i in data["ai_insights"]:
+        st.success(i)
+
+    # ================= AI RECOMMENDATIONS =================
 
     st.subheader("💡 AI Recommendations")
 
-    recommendations = []
+    for r in data["recommendations"]:
+        st.write("👉", r)
 
-    if profit_margin < 15:
-        recommendations.append("Reduce operational costs and negotiate supplier contracts.")
+    # ================= PDF DOWNLOAD =================
 
-    if growth < 5:
-        recommendations.append("Invest in marketing and customer acquisition.")
+    st.subheader("📄 Investor-ready Financial Report")
 
-    if data["totals"]["expenses"] > data["totals"]["revenue"] * 0.75:
-        recommendations.append("High expense ratio detected. Review overhead spending.")
-
-    if risk != "Low Risk":
-        recommendations.append("Build cash reserves to improve financial stability.")
-
-    if not recommendations:
-        recommendations.append("Financial performance is excellent. Continue current strategy.")
-
-    for rec in recommendations:
-        st.write("👉", rec)
-
-    # ===================== SUMMARY ======================
-
-    st.subheader("📄 AI Summary")
-
-    st.markdown(f"""
-    - Total Revenue: ₹ {data['totals']['revenue']:,.0f}  
-    - Total Expenses: ₹ {data['totals']['expenses']:,.0f}  
-    - Cashflow: ₹ {data['totals']['cashflow']:,.0f}  
-    - Profit Margin: {profit_margin:.2f}%  
-    - Credit Score: {data['kpis']['credit_score']}  
-    - Risk Level: {risk}
-    """)
-
-    st.success("✅ AI analysis completed successfully!")
+    if os.path.exists("financial_report.pdf"):
+        with open("financial_report.pdf", "rb") as pdf_file:
+            st.download_button(
+                label="⬇ Download PDF Report",
+                data=pdf_file,
+                file_name="financial_report.pdf",
+                mime="application/pdf"
+            )

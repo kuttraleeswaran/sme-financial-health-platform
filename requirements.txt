@@ -1,9 +1,10 @@
-streamlit
 fastapi
 uvicorn
 pandas
-numpy
-plotly
+streamlit
 requests
 openpyxl
+plotly
 scikit-learn
+fpdf
+deep-translator

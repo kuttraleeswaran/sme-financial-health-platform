@@ -1,119 +1,133 @@
 from fastapi import FastAPI, UploadFile, File
 import pandas as pd
-from fastapi.middleware.cors import CORSMiddleware
+from sklearn.linear_model import LinearRegression
+from fpdf import FPDF
+from deep_translator import GoogleTranslator
+import os
 
-app = FastAPI()
+app = FastAPI(title="SME Financial Health AI Platform")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+MONTHS = ["Jan","Feb","Mar","Apr","May","Jun",
+          "Jul","Aug","Sep","Oct","Nov","Dec"]
+
+def translate(texts, lang):
+    return [GoogleTranslator(source='auto', target=lang).translate(t) for t in texts]
 
 @app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(file: UploadFile = File(...), language: str = "en"):
 
     df = pd.read_excel(file.file)
 
-    # Ensure columns exist
-    df["Year"] = df["Year"].astype(int)
-    df["Month"] = df["Month"].astype(str)
-
-    # 👉 Auto calculate Cashflow
     df["Cashflow"] = df["Revenue"] - df["Expenses"]
 
-    # ---------------- TOTALS ----------------
+    df["Month"] = pd.Categorical(df["Month"], categories=MONTHS, ordered=True)
+    df = df.sort_values(["Year","Month"])
 
-    totals = {
-        "revenue": float(df["Revenue"].sum()),
-        "expenses": float(df["Expenses"].sum()),
-        "cashflow": float(df["Cashflow"].sum())
+    total_revenue = float(df["Revenue"].sum())
+    total_expenses = float(df["Expenses"].sum())
+    total_cashflow = float(df["Cashflow"].sum())
+
+    profit_margin = (total_cashflow / total_revenue) * 100
+
+    yearly = df.groupby("Year")[["Revenue","Expenses","Cashflow"]].sum().reset_index()
+
+    yearly_data = yearly.to_dict(orient="records")
+
+    monthly_by_year = {}
+    for y in df["Year"].unique():
+        temp = df[df["Year"] == y]
+        monthly_by_year[str(y)] = temp[["Month","Revenue","Expenses","Cashflow"]].to_dict(orient="records")
+
+    # ============ ML FORECAST ============
+
+    X = yearly["Year"].values.reshape(-1,1)
+    y = yearly["Revenue"].values
+
+    model = LinearRegression()
+    model.fit(X,y)
+
+    next_year = yearly["Year"].max() + 1
+    predicted_revenue = float(model.predict([[next_year]])[0])
+
+    # ============ GST COMPLIANCE (SIMULATED) ============
+
+    gst_ratio = total_expenses * 0.18
+    gst_paid_estimated = gst_ratio * 0.95  # assume some gap
+
+    gst_status = "Compliant" if gst_paid_estimated >= gst_ratio*0.9 else "Non-Compliant"
+
+    gst_report = {
+        "expected_gst": round(gst_ratio,2),
+        "estimated_paid": round(gst_paid_estimated,2),
+        "status": gst_status
     }
 
-    # ---------------- MONTHLY ----------------
+    # ============ BENCHMARK ============
 
-    monthly = (
-        df.groupby(["Year", "Month"])
-        .sum(numeric_only=True)
-        .reset_index()
-        .to_dict(orient="records")
-    )
+    industry_avg = 18
+    benchmark_status = "Above Industry" if profit_margin > industry_avg else "Below Industry"
 
-    for row in monthly:
-        row["Year"] = int(row["Year"])
-        row["Revenue"] = float(row["Revenue"])
-        row["Expenses"] = float(row["Expenses"])
-        row["Cashflow"] = float(row["Cashflow"])
-
-    # ---------------- YEARLY ----------------
-
-    yearly = (
-        df.groupby("Year")
-        .sum(numeric_only=True)
-        .reset_index()
-        .to_dict(orient="records")
-    )
-
-    for row in yearly:
-        row["Year"] = int(row["Year"])
-        row["Revenue"] = float(row["Revenue"])
-        row["Expenses"] = float(row["Expenses"])
-        row["Cashflow"] = float(row["Cashflow"])
-
-    # ---------------- KPIs ----------------
-
-    profit = totals["revenue"] - totals["expenses"]
-    profit_margin = (profit / totals["revenue"]) * 100
-
-    growth = ((yearly[-1]["Revenue"] - yearly[0]["Revenue"]) / yearly[0]["Revenue"]) * 100
-
-    credit_score = int(min(850, 650 + profit_margin * 4))
-
-    if profit_margin > 20:
-        risk = "Low Risk"
-    elif profit_margin > 10:
-        risk = "Medium Risk"
-    else:
-        risk = "High Risk"
-
-    kpis = {
-        "profit_margin": round(profit_margin,2),
-        "growth_percent": round(growth,2),
-        "credit_score": credit_score,
-        "risk_level": risk
+    benchmark = {
+        "industry": "Retail",
+        "industry_avg_margin": industry_avg,
+        "your_margin": round(profit_margin,2),
+        "status": benchmark_status
     }
 
-    # ---------------- AI INSIGHTS ----------------
+    # ============ INSIGHTS ============
 
     insights = [
-        f"Total Revenue: ₹{int(totals['revenue'])}",
-        f"Total Expenses: ₹{int(totals['expenses'])}",
-        f"Profit Margin: {round(profit_margin,1)}%",
-        f"Business Risk: {risk}"
+        f"Profit margin is {round(profit_margin,1)}%",
+        "Revenue shows steady growth",
+        f"GST compliance status is {gst_status}"
     ]
 
-    # ---------------- AI RECOMMENDATIONS ----------------
+    recommendations = [
+        "Optimize operational expenses",
+        "Improve cashflow cycle",
+        "Consider financing options for growth"
+    ]
 
-    recommendations = []
+    # ============ MULTILINGUAL ============
 
-    if profit_margin < 15:
-        recommendations.append("Reduce operating expenses to improve profit.")
+    if language != "en":
+        insights = translate(insights, language)
+        recommendations = translate(recommendations, language)
 
-    if growth < 5:
-        recommendations.append("Focus on increasing sales and marketing.")
+    # ============ PDF REPORT ============
 
-    if risk != "Low Risk":
-        recommendations.append("Improve cashflow management.")
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
 
-    if not recommendations:
-        recommendations.append("Financial performance is strong. Maintain current strategy.")
+    pdf.cell(200,10,"SME Financial Health Report", ln=True)
+
+    pdf.cell(200,10,f"Revenue: {total_revenue}", ln=True)
+    pdf.cell(200,10,f"Expenses: {total_expenses}", ln=True)
+    pdf.cell(200,10,f"Cashflow: {total_cashflow}", ln=True)
+    pdf.cell(200,10,f"Profit Margin: {round(profit_margin,2)}%", ln=True)
+    pdf.cell(200,10,f"Forecast Revenue Next Year: {round(predicted_revenue,2)}", ln=True)
+    pdf.cell(200,10,f"GST Status: {gst_status}", ln=True)
+
+    pdf_path = "financial_report.pdf"
+    pdf.output(pdf_path)
 
     return {
-        "totals": totals,
-        "monthly": monthly,
-        "yearly": yearly,
-        "kpis": kpis,
-        "insights": insights,
-        "recommendations": recommendations
+        "summary": {
+            "total_revenue": round(total_revenue,2),
+            "total_expenses": round(total_expenses,2),
+            "total_cashflow": round(total_cashflow,2),
+            "profit_margin": round(profit_margin,2)
+        },
+        "monthly_by_year": monthly_by_year,
+        "yearly_summary": yearly_data,
+        "ml_forecast": {
+            "next_year": next_year,
+            "predicted_revenue": round(predicted_revenue,2)
+        },
+        "gst_compliance": gst_report,
+        "benchmark": benchmark,
+        "ai_insights": insights,
+        "recommendations": recommendations,
+        "pdf_report": pdf_path
     }
