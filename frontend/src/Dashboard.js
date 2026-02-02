@@ -16,7 +16,8 @@ function Dashboard(){
     formData.append("file", file);
 
     const res = await axios.post(
-      "http://127.0.0.1:8000/upload",
+      "https://sme-financial-health-platform.onrender.com/upload"
+,
       formData
     );
 
@@ -40,7 +41,8 @@ function Dashboard(){
         </button>
 
         <a 
-          href="http://127.0.0.1:8000/download-report" 
+          href="https://sme-financial-health-platform.onrender.com/download-report"
+ 
           target="_blank"
           rel="noreferrer"
         >
