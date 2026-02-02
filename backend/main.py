@@ -4,10 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from .finance_engine import analyze_financials
 
-
 from backend.finance_engine import analyze_financials, forecast_revenue, compare_with_industry
+from backend.ai_engine import generate_ai_insights
 
-from ai_engine import generate_ai_insights
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
