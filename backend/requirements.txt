@@ -4,3 +4,4 @@ pandas
 python-multipart
 openai
 psycopg2-binary
+reportlab
