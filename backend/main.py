@@ -2,7 +2,8 @@ from fastapi import FastAPI, UploadFile, File
 import pandas as pd
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from .finance_engine import analyze_finances
+from .finance_engine import analyze_financials
+
 
 from backend.finance_engine import analyze_financials, forecast_revenue, compare_with_industry
 
