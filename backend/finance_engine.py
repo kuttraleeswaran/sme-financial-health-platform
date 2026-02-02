@@ -97,14 +97,23 @@ INDUSTRY_BENCHMARKS = {
     "services": {"profit_margin": 25, "health_score": 80}
 }
 
-def compare_with_industry(summary, industry="retail"):
+def compare_with_industry(summary, industry):
+    
+    industry_data = {
+        "retail": {"margin": 15, "health": 70},
+        "manufacturing": {"margin": 18, "health": 75},
+        "services": {"margin": 22, "health": 80},
+        "agriculture": {"margin": 12, "health": 65},
+        "ecommerce": {"margin": 20, "health": 78}
+    }
 
-    benchmark = INDUSTRY_BENCHMARKS[industry]
+    data = industry_data.get(industry, industry_data["retail"])
 
     return {
         "industry": industry,
         "your_profit_margin": summary["profit_margin"],
-        "industry_profit_margin": benchmark["profit_margin"],
+        "industry_profit_margin": data["margin"],
         "your_health_score": summary["health_score"],
-        "industry_health_score": benchmark["health_score"]
+        "industry_health_score": data["health"]
     }
+
